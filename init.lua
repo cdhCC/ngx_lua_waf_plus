@@ -14,13 +14,25 @@ PathInfoFix = optionIsOn(PathInfoFix)
 attacklog = optionIsOn(attacklog)
 CCDeny = optionIsOn(CCDeny)
 Redirect=optionIsOn(Redirect)
+BanIp=optionIsOn(BanIp)
+
 function getClientIp()
         IP  = ngx.var.remote_addr 
+        ---针对前面有代理的情况 返回值可能存在多个IP： 代理1,代理2,代理3
+        if ngx.var.HTTP_X_FORWARDED_FOR then
+            IP = ngx.var.HTTP_X_FORWARDED_FOR
+        end
+        ---针对前面有N个代理的情况，需要前面代理配置X-REAL-IP，一般只有一个IP
+        if ngx.var.HTTP_X_REAL_IP then
+            IP = ngx.var.HTTP_X_REAL_IP
+        end
         if IP == nil then
                 IP  = "unknown"
         end
         return IP
 end
+
+
 function write(logfile,msg)
     local fd = io.open(logfile,"ab")
     if fd == nil then return end
@@ -63,13 +75,55 @@ uarules=read_rule('user-agent')
 wturlrules=read_rule('whiteurl')
 postrules=read_rule('post')
 ckrules=read_rule('cookie')
-html=read_rule('returnhtml')
+returnhtml=read_rule('returnhtml')
+banhtml=read_rule('banhtml')
 
+
+------频繁攻击ip封堵-----------------------
+function ban_ip(point)
+    local token = getClientIp() .. "_WAF"
+    local limit = ngx.shared.limit
+    local req,_=limit:get(token)
+    if req then
+        limit:set(token,req+point,BanTime)  --发现一次，增加积分，1小时内有效
+    else
+        limit:set(token,point,BanTime)
+    end
+end
+
+function get_ban_times()
+    local token = getClientIp() .. "_WAF"
+    local limit = ngx.shared.limit
+        local req,_=limit:get(token)
+    if req then
+        return req
+    else return 0
+    end
+end
+
+---检查源IP是否被Ban，如果被ban，则返回封锁页面
+function is_ban()
+    if BanIp then
+        if get_ban_times() >= BanTotalGrade then        --超过规定的BanTotalGrade积分，封锁IP，从上一次攻击被扫描到开始计算，总计封锁 BanTime 秒
+            ngx.header.content_type = "text/html;charset=UTF-8"
+            ngx.say(banhtml)
+            ngx.exit(ngx.HTTP_FORBIDDEN)
+            return true
+        else
+            return false
+        end
+    end
+    return false
+end
+
+
+--发现一次攻击扣BanGradePeerAttack分，超过BanTotalGrade分直接封锁源IP
 function say_html()
+    ban_ip(BanGradePeerAttack)
     if Redirect then
         ngx.header.content_type = "text/html"
         ngx.status = ngx.HTTP_FORBIDDEN
-        ngx.say(html)
+        ngx.say(returnhtml)
         ngx.exit(ngx.status)
     end
 end

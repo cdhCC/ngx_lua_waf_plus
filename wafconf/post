@@ -7,6 +7,8 @@ benchmark\((.*)\,(.*)\)
 base64_decode\(
 (?:from\W+information_schema\W)
 into(\s+)+(?:dump|out)file\s*
+(?:(?:current_)user|database|schema|connection_id)\s*\(
+(?:etc\/\W*passwd)
 group\s+by.+\(
 xwork.MethodAccessor
 (?:define|eval|file_get_contents|include|require|require_once|shell_exec|phpinfo|system|passthru|preg_\w+|execute|echo|print|print_r|var_dump|(fp)open|alert|showmodaldialog)\(
