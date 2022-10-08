@@ -16,16 +16,25 @@ CCDeny = optionIsOn(CCDeny)
 Redirect=optionIsOn(Redirect)
 BanIp=optionIsOn(BanIp)
 
+
+---todo 此处存在BUG，如果攻击者在头部伪造HTTP_X_FORWARDED_FOR字段，能对被伪造的IP造成拒绝服务攻击
+---解决办法1：只允许来自特定remote_addr主机的数据包更换IP为HTTP_X_FORWARDED_FOR，需要用户手动配置前端代理IP
+---解决办法2：只允许包含自定义请求头的数据包更换IP
 function getClientIp()
         IP  = ngx.var.remote_addr 
         ---针对前面有代理的情况 返回值可能存在多个IP： 代理1,代理2,代理3
-        if ngx.var.HTTP_X_FORWARDED_FOR then
-            IP = ngx.var.HTTP_X_FORWARDED_FOR
-        end
+        ---if ngx.var.HTTP_X_FORWARDED_FOR then
+        ---    IP = ngx.var.HTTP_X_FORWARDED_FOR
+        ---end
         ---针对前面有N个代理的情况，需要前面代理配置X-REAL-IP，一般只有一个IP
-        if ngx.var.HTTP_X_REAL_IP then
-            IP = ngx.var.HTTP_X_REAL_IP
+        ---if ngx.var.HTTP_X_REAL_IP then
+        ---    IP = ngx.var.HTTP_X_REAL_IP
+        ---end
+        ---采用方法2, X_FORWARDED_FOR_HEADER 参数在config中配置，是自定义的代理请求头
+        if ngx.var[HTTP_X_FORWARDED_FOR_HEADER] then
+            IP = ngx.var[HTTP_X_FORWARDED_FOR_HEADER]
         end
+
         if IP == nil then
                 IP  = "unknown"
         end
@@ -73,6 +82,8 @@ urlrules=read_rule('url')
 argsrules=read_rule('args')
 uarules=read_rule('user-agent')
 wturlrules=read_rule('whiteurl')
+wturirules=read_rule('whiteuri')
+wtportrules==read_rule('whiteport')
 postrules=read_rule('post')
 ckrules=read_rule('cookie')
 returnhtml=read_rule('returnhtml')
@@ -85,9 +96,9 @@ function ban_ip(point)
     local limit = ngx.shared.limit
     local req,_=limit:get(token)
     if req then
-        limit:set(token,req+point,BanTime)  --发现一次，增加积分，1小时内有效
+        limit:set(token,req+point,tonumber(BanTime))  --发现一次，增加积分，1小时内有效
     else
-        limit:set(token,point,BanTime)
+        limit:set(token,point,tonumber(BanTime))
     end
 end
 
@@ -140,6 +151,42 @@ function whiteurl()
     end
     return false
 end
+
+function whiteuri()
+    if WhiteCheck then
+        local args=ngx.var.arg_service
+        if args == nil then
+           return false
+        end
+        if wturirules ~=nil then
+            for _,rule in pairs(wturirules) do
+                if ngxmatch(args,rule,"isjo") then
+                    return true
+                 end
+            end
+        end
+    end
+    return false
+end
+
+function whiteport()
+    if WhiteCheck then
+        local args=ngx.var.server_port
+        if args == nil then
+           return false
+        end
+        if wtportrules ~=nil then
+            for _,rule in pairs(wtportrules) do
+                if ngxmatch(args,rule,"isjo") then
+                    return true
+                 end
+            end
+        end
+    end
+    return false
+end
+
+
 function fileExtCheck(ext)
     local items = Set(black_fileExt)
     ext=string.lower(ext)
@@ -153,11 +200,13 @@ function fileExtCheck(ext)
     end
     return false
 end
+
 function Set (list)
   local set = {}
   for _, l in ipairs(list) do set[l] = true end
   return set
 end
+
 function args()
     for _,rule in pairs(argsrules) do
         local args = ngx.req.get_uri_args()
@@ -211,6 +260,7 @@ function ua()
     end
     return false
 end
+
 function body(data)
     for _,rule in pairs(postrules) do
         if rule ~="" and data~="" and ngxmatch(unescape(data),rule,"isjo") then
@@ -221,6 +271,7 @@ function body(data)
     end
     return false
 end
+
 function cookie()
     local ck = ngx.var.http_cookie
     if CookieCheck and ck then
