@@ -1,105 +1,67 @@
 local content_length=tonumber(ngx.req.get_headers()['content-length'])
-local method=ngx.req.get_method()
+
 local ngxmatch=ngx.re.match
-if whiteip() then
-elseif blockip() then
-elseif is_ban() then
-elseif denycc() then
-elseif ngx.var.http_Acunetix_Aspect then
-    ngx.exit(444)
-elseif ngx.var.http_X_Scan_Memo then
-    ngx.exit(444)
-elseif whiteport() then
-elseif whiteurl() then
-elseif whiteuri() then
-elseif ua() then
-elseif url() then
-elseif args() then
-elseif cookie() then
-elseif PostCheck then
-    if method=="POST" then   
-    	local boundary = get_boundary()
-      	if boundary then
-      		local len = string.len
-            local sock, err = ngx.req.socket()
-          	if not sock then
-          		return
+
+if whiteip() then return end
+
+if blockip() then return end
+if is_ban() then return end
+if responseErrorProtect() then return end
+if denycc() then return end
+if ngx.var.http_Acunetix_Aspect then ngx.exit(444) end
+if ngx.var.http_X_Scan_Memo then ngx.exit(444) end
+if whiteport() then return end
+if whiteurl() then return end
+if whiteuri() then return end
+if ua() then return end
+if url() then return end
+if args() then return end
+if cookie() then return end
+
+if BodyCheck then
+        --设置读取post body体，必须设置，否则无法读取POST数据
+      	ngx.req.read_body()
+        --POST内容被保存在内存中，用get_body_data直接读
+        local data=ngx.req.get_body_data()
+        --POST内容太大，被保存到临时文件中，需要以文件方式处理
+        --body体大小大于client_body_buffer_size，则会被保存在文件中
+        if not data then
+            local filePath = ngx.req.get_body_file()
+            if filePath then
+                local file=io.open(filePath,"r")
+                --此处bug：若上传的文件太大超内存，则程序异常，所以nginx中client_max_body_size不能配置太大，否则会撑爆内存
+                --若有超大附件上传，则建议添加白名单whiteurl
+                data=file:read("*a") 
+                file:close()
             end
+        end
 
-            --- 当上传的文件超过128kb时，使用核心区缓存，存在风险，建议增大配置
-            ---省略参数，由nginx配置client_body_buffer_size决定
-      		ngx.req.init_body()
-      		--ngx.req.init_body(128 * 1024)
-      		
-            sock:settimeout(0)
+        if not data then
+            --get_body_data和get_body_file都没获取到body，则判定无body数据
+            return
+        end
 
-            ---分批次获取post数据，每次获取分析4KB，直至取完
-      		local content_length = nil
-          	content_length=tonumber(ngx.req.get_headers()['content-length'])
-          	
-          	local chunk_size = 4096
-            if content_length < chunk_size then
-          		chunk_size = content_length
-      		end
+        --开始对body数据进行处理
+        --查找请求头确定是否存在上传分界符号
+        local boundary = get_boundary()
 
-            local size = 0
-      		while size < content_length do
-    			local data, err, partial = sock:receive(chunk_size)
-    			data = data or partial
-    			if not data then
-      				return
-    			end
-    			ngx.req.append_body(data)
-
-          		if body(data) then
-               		return true
-           		end
-
-    			size = size + len(data)
-    			local m = ngxmatch(data,[[Content-Disposition: form-data;(.+)filename="(.+)\\.(.*)"]],'ijo')
-          		if m then
-                	fileExtCheck(m[3])
-                	filetranslate = true
-          		else if ngxmatch(data,"Content-Disposition:",'isjo') then
-                    filetranslate = false
+        --存在分界符，进入文件上传处理
+        if boundary then
+            local parts=split_str(data,boundary)
+            for i,v in ipairs(parts) do
+                local m = ngxmatch(v,[[Content-Disposition: form-data;(.+)filename="(.+)\.(.*)"]],'ijo')
+                    --如果包含filename，则进行文件后缀名检查
+                if m then
+                    fileExtCheck(m[3])
                 end
-
-                if filetranslate==false then
-                  	if body(data) then
-                        return true
-                    end
+                --如果开启了文件上传检测，则进入内容检查
+                if PostFileCheck then
+                    body(v)
                 end
-                
-          	end
-    		local less = content_length - size
-    		if less < chunk_size then
-      			chunk_size = less
-    		end
-   		end  ---POST文件上传 检测结束
-
-   		ngx.req.finish_body()
-    	else
-      		ngx.req.read_body()
-      		local args = ngx.req.get_post_args()
-      		if not args then
-        		return
-      		end
-      		for key, val in pairs(args) do
-        	if type(val) == "table" then
-          		if type(val[1]) == "boolean" then
-            		return
-          		end
-          		data=table.concat(val, ", ")
-        		else
-          			data=val
-        		end
-        		if data and type(data) ~= "boolean" and body(data) then
-                      body(key)
-        		end
-      		end
-    	end  --- post 参数上传 检测结束
-
-    end   --method=="POST" 结束
-else
-    return
+            end
+        --不存在分界符，直接进入body检测
+        else
+            body(data)
+        end
+--body check结束
 end
