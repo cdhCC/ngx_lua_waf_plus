@@ -2,6 +2,6 @@
 
 基于loveshell/ngx_lua_waf和宝塔版waf，做了部分调整
 
-https://github.com/loveshell/ngx_lua_waf
+参考 https://github.com/loveshell/ngx_lua_waf
 
 
