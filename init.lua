@@ -7,15 +7,17 @@ local optionIsOn = function (options) return options == "on" and true or false e
 logpath = logdir 
 rulepath = RulePath
 UrlDeny = optionIsOn(UrlDeny)
-PostCheck = optionIsOn(postMatch)
+BodyCheck = optionIsOn(BodyCheck)
+PostFileCheck=optionIsOn(PostFileCheck)
+BodyArgsCheck=optionIsOn(BodyArgsCheck)
 CookieCheck = optionIsOn(cookieMatch)
 WhiteCheck = optionIsOn(whiteModule)
 PathInfoFix = optionIsOn(PathInfoFix)
 attacklog = optionIsOn(attacklog)
-CCDeny = optionIsOn(CCDeny)
+CCDeny = optionIsOn(CCDeny) 
 Redirect=optionIsOn(Redirect)
 BanIp=optionIsOn(BanIp)
-
+responseErrorProtect=optionIsOn(responseErrorProtect)
 
 ---todo 此处存在BUG，如果攻击者在头部伪造HTTP_X_FORWARDED_FOR字段，能对被伪造的IP造成拒绝服务攻击
 ---解决办法1：只允许来自特定remote_addr主机的数据包更换IP为HTTP_X_FORWARDED_FOR，需要用户手动配置前端代理IP
@@ -64,7 +66,7 @@ function log(method,url,data,ruletag)
         write(filename,line)
     end
 end
-------------------------------------规则读取函数-------------------------------------------------------------------
+
 function read_rule(var)
     file = io.open(rulepath..'/'..var,"r")
     if file==nil then
@@ -83,32 +85,34 @@ argsrules=read_rule('args')
 uarules=read_rule('user-agent')
 wturlrules=read_rule('whiteurl')
 wturirules=read_rule('whiteuri')
-wtportrules==read_rule('whiteport')
+wtportrules=read_rule('whiteport')
 postrules=read_rule('post')
 ckrules=read_rule('cookie')
 returnhtml=read_rule('returnhtml')
 banhtml=read_rule('banhtml')
 
 
-------频繁攻击ip封堵-----------------------
+
 function ban_ip(point)
-    local token = getClientIp() .. "_WAF"
-    local limit = ngx.shared.limit
+    local token = getClientIp() .. "_BAN"
+    local limit = ngx.shared.banip
     local req,_=limit:get(token)
     if req then
-        limit:set(token,req+point,tonumber(BanTime))  --发现一次，增加积分，1小时内有效
+        limit:set(token,req+point,tonumber(BanTime),ngx.time())  --发现一次，增加积分，BANTIME内有效
     else
-        limit:set(token,point,tonumber(BanTime))
+        limit:set(token,point,tonumber(BanTime),ngx.time())
     end
 end
 
 function get_ban_times()
-    local token = getClientIp() .. "_WAF"
-    local limit = ngx.shared.limit
+    local token = getClientIp() .. "_BAN"
+    local limit = ngx.shared.banip
         local req,_=limit:get(token)
     if req then
+	---log('limit:get',req,"-","get_ban_times")
         return req
-    else return 0
+    else 
+        return 0
     end
 end
 
@@ -116,7 +120,71 @@ end
 function is_ban()
     if BanIp then
         if get_ban_times() >= BanTotalGrade then        --超过规定的BanTotalGrade积分，封锁IP，从上一次攻击被扫描到开始计算，总计封锁 BanTime 秒
+	    log('多次攻击BAN-IP:  ',ngx.var.request_uri,"-","BLOCK_IP")
+            ngx.status = ngx.HTTP_FORBIDDEN
+	    ngx.header.content_type = "text/html;charset=UTF-8"
+	    ngx.say("<div style='display: none;'>" .. ngx.localtime() .. "</div>")
+	    ngx.say("<div style='display: none;'> HELLO, " .. getClientIp() .. " , YOU HAVE BEEN BLOCKED BY US, TRY ANOTHER DAY ! SORRY ! BYE</div>")
+            ngx.say(banhtml)
+            ngx.exit(ngx.HTTP_FORBIDDEN)
+            return true
+        else
+            return false
+        end
+    end
+    return false
+end
+
+function checkResponseStatus(state)
+    for _,errtype in pairs(responseErrorType) do
+            if state == errtype then
+                add_responseError(1)
+		log('异常状态检测  ' .. errtype ,ngx.var.request_uri,"-","RESPONSE_ERROR")
+            end
+    end
+end
+
+function add_responseError(point)
+    local token = getClientIp() .. "_errResponse"
+    local limit = ngx.shared.resErrLimit
+    local req,_=limit:get(token)
+    if req then
+        limit:set(token,req+point,tonumber(responseErrorCheckTime),ngx.time())
+    else
+        limit:set(token,point,tonumber(responseErrorCheckTime),ngx.time())
+    end
+end
+
+
+---获取响应状态码错误次数
+function get_responseError()
+    local token = getClientIp() .. "_errResponse"
+    local limit = ngx.shared.resErrLimit
+        local req,_=limit:get(token)
+    if req then
+        return req
+    else
+        return 0
+    end
+end
+
+---检查源IP是否发生多次响应异常状态，如果次数太多，则封锁 responseErrorBanTime 秒
+function responseErrorProtect()
+    if responseErrorProtect then
+	local responseError = get_responseError()
+        if responseError >= responseErrorCount then
+	    ---达到检测阈值，进行长时间封锁
+	    if responseError == responseErrorCount then
+	        local token = getClientIp() .. "_errResponse"
+		local limit = ngx.shared.resErrLimit
+		limit:set(token,responseErrorCount+1,tonumber(responseErrorBanTime),ngx.time())
+	    end
+
+            log('异常状态封禁  ',ngx.var.request_uri,"-","TOMANY_RESPONSE_ERROR")
+            ngx.status = ngx.HTTP_FORBIDDEN
             ngx.header.content_type = "text/html;charset=UTF-8"
+            ngx.say("<div style='display: none;'>" .. ngx.localtime() .. "</div>")
+            ngx.say("<div style='display: none;'> HELLO, " .. getClientIp() .. " , YOUR REQUEST HAVE TO MUCH ERROR RESPONSE,PLEASE TRY ANOTHER TIME ! SORRY</div>")
             ngx.say(banhtml)
             ngx.exit(ngx.HTTP_FORBIDDEN)
             return true
@@ -128,12 +196,15 @@ function is_ban()
 end
 
 
+
 --发现一次攻击扣BanGradePeerAttack分，超过BanTotalGrade分直接封锁源IP
-function say_html()
+function BanAndRuturnHtml()
     ban_ip(BanGradePeerAttack)
     if Redirect then
         ngx.header.content_type = "text/html"
         ngx.status = ngx.HTTP_FORBIDDEN
+	    ngx.say("<div style='display: none;'>" .. ngx.localtime() .. "</div>")
+	    ngx.say("<div style='display: none;'>" .. getClientIp().. " BLOCKED!</div>")
         ngx.say(returnhtml)
         ngx.exit(ngx.status)
     end
@@ -193,8 +264,8 @@ function fileExtCheck(ext)
     if ext then
         for rule in pairs(items) do
             if ngx.re.match(ext,rule,"isjo") then
-	        log('POST',ngx.var.request_uri,"-","file attack with ext "..ext)
-            say_html()
+	        log('FileExt_Check',ngx.var.request_uri,"-","file attack with ext "..ext)
+            BanAndRuturnHtml()
             end
         end
     end
@@ -224,8 +295,8 @@ function args()
                 data=val
             end
             if data and type(data) ~= "boolean" and rule ~="" and ngxmatch(unescape(data),rule,"isjo") then
-                log('GET',ngx.var.request_uri,"-",rule)
-                say_html()
+                log('Args_Check',ngx.var.request_uri,"-",rule)
+                BanAndRuturnHtml()
                 return true
             end
         end
@@ -238,8 +309,8 @@ function url()
     if UrlDeny then
         for _,rule in pairs(urlrules) do
             if rule ~="" and ngxmatch(ngx.var.request_uri,rule,"isjo") then
-                log('GET',ngx.var.request_uri,"-",rule)
-                say_html()
+                log('URL_Check',ngx.var.request_uri,"-",rule)
+                BanAndRuturnHtml()
                 return true
             end
         end
@@ -252,9 +323,9 @@ function ua()
     if ua ~= nil then
         for _,rule in pairs(uarules) do
             if rule ~="" and ngxmatch(ua,rule,"isjo") then
-                log('UA',ngx.var.request_uri,"-",rule)
-                say_html()
-            return true
+                log('UA_Check',ngx.var.request_uri,"-",rule)
+                BanAndRuturnHtml()
+                return true
             end
         end
     end
@@ -264,8 +335,8 @@ end
 function body(data)
     for _,rule in pairs(postrules) do
         if rule ~="" and data~="" and ngxmatch(unescape(data),rule,"isjo") then
-            log('POST',ngx.var.request_uri,data,rule)
-            say_html()
+            log('Body_Check',ngx.var.request_uri,data,rule)
+            BanAndRuturnHtml()
             return true
         end
     end
@@ -277,8 +348,8 @@ function cookie()
     if CookieCheck and ck then
         for _,rule in pairs(ckrules) do
             if rule ~="" and ngxmatch(ck,rule,"isjo") then
-                log('Cookie',ngx.var.request_uri,"-",rule)
-                say_html()
+                log('Cookie_Check',ngx.var.request_uri,"-",rule)
+                BanAndRuturnHtml()
             return true
             end
         end
@@ -292,7 +363,7 @@ function denycc()
         CCcount=tonumber(string.match(CCrate,'(.*)/'))
         CCseconds=tonumber(string.match(CCrate,'/(.*)'))
         local token = getClientIp()..uri
-        local limit = ngx.shared.limit
+        local limit = ngx.shared.cclimit
         local req,_=limit:get(token)
         if req then
             if req > CCcount then
@@ -334,7 +405,7 @@ function whiteip()
             end
         end
     end
-        return false
+    return false
 end
 
 function blockip()
@@ -347,4 +418,25 @@ function blockip()
          end
      end
          return false
+end
+
+
+function split_str(str, sep)
+    local t={}
+    local _start=0;
+    local _end=0;
+    local last_end=_end;
+    while true do
+        _start,_end=string.find(str,sep,last_end+1)
+        if _start ~= nil and _end ~=nil then
+                if _start ~= last_end+1 then
+                        table.insert(t,string.sub(str,last_end+1,_start-1))
+                end
+                last_end=_end
+        else
+                table.insert(t,string.sub(str,last_end+1,string.len(str)))
+                break
+        end
+    end
+    return t;
 end
