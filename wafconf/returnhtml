@@ -1,24 +1,5 @@
 <!doctype html>
 <html>
-<head>
-<meta charset="utf-8">
-<title>Warning</title>
-<style>
-*{margin:0;padding:0;color:#444}
-body{font-size:14px;font-family:"宋体"}
-.main{width:600px;margin:10% auto;}
-.title{background: #20a53a;color: #fff;font-size: 16px;height: 40px;line-height: 40px;padding-left: 20px;}
-.content{background-color:#f3f7f9;border:1px dashed #c6d9b6;padding:20px}
-</style>
-</head>
-
-<body>
-	<div class="main">
-		<div class="title">Warning</div>
-		<div class="content">
-			<p class="t1">BAD request</p>
-		</div>
-	</div>
-</body>
+403
 </html>
 
