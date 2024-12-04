@@ -279,8 +279,12 @@ function Set (list)
 end
 
 function args()
+    local args = ngx.req.get_uri_args()
+    local uri=ngx.var.request_uri()
+
+    --todo : 漏洞  ngx.req.get_uri_args()只能获取100个参数，超过100造成绕过漏洞
     for _,rule in pairs(argsrules) do
-        local args = ngx.req.get_uri_args()
+        
         for key, val in pairs(args) do
             if type(val)=='table' then
                  local t={}
@@ -295,10 +299,17 @@ function args()
                 data=val
             end
             if data and type(data) ~= "boolean" and rule ~="" and ngxmatch(unescape(data),rule,"isjo") then
-                log('Args_Check',ngx.var.request_uri,"-",rule)
+                log('Args_Check',uri,"-",rule)
                 BanAndRuturnHtml()
                 return true
             end
+        end
+        
+         --临时修复
+        if rule ~="" and ngxmatch(uri,rule,"isjo") then
+            log('Args_Check',uri,"-",rule)
+                BanAndRuturnHtml()
+                return true
         end
     end
     return false
