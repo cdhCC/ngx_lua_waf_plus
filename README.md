@@ -14,9 +14,16 @@
 
 
 lua_package_path "/www/waf/?.lua;";
+
 lua_shared_dict banip 10m;
+
 lua_shared_dict cclimit 10m;
+
 lua_shared_dict resErrLimit 10m;
+
 init_by_lua_file  /www/waf/init.lua;
+
 access_by_lua_file /www/waf/waf.lua;
+
 log_by_lua_file /www/waf/response.lua;
+
