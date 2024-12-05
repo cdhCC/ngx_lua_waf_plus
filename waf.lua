@@ -19,11 +19,11 @@ if args() then return end
 if cookie() then return end
 
 if BodyCheck then
-        --设置读取post body体，必须设置，否则无法读取POST数据
+        --设置读取 body体，必须设置，否则无法读取数据
       	ngx.req.read_body()
-        --POST内容被保存在内存中，用get_body_data直接读
+        --内容被保存在内存中，用get_body_data直接读
         local data=ngx.req.get_body_data()
-        --POST内容太大，被保存到临时文件中，需要以文件方式处理
+        --内容太大，被保存到临时文件中，需要以文件方式处理
         --body体大小大于client_body_buffer_size，则会被保存在文件中
         if not data then
             local filePath = ngx.req.get_body_file()
