@@ -176,7 +176,7 @@ function responseErrorProtect()
     if responseErrorProtect then
 	local responseError = get_responseError()
         if responseError >= responseErrorCount then
-	    ---达到检测阈值，进行长时间封锁
+	    ---达到检测阈值，进行封锁
 	    if responseError == responseErrorCount then
 	        local token = getClientIp() .. "_errResponse"
 		local limit = ngx.shared.resErrLimit
