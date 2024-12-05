@@ -74,7 +74,10 @@ function read_rule(var)
     end
     t = {}
     for line in file:lines() do
+        if string.find(line,"#") ==1 then
+        else 
         table.insert(t,line)
+        end
     end
     file:close()
     return(t)
@@ -139,7 +142,7 @@ function checkResponseStatus(state)
     for _,errtype in pairs(responseErrorType) do
             if state == errtype then
                 add_responseError(1)
-		log('异常状态检测  ' .. errtype ,ngx.var.request_uri,"-","RESPONSE_ERROR")
+	           log('异常状态检测  ' .. errtype ,ngx.var.request_uri,"-","RESPONSE_ERROR")
             end
     end
 end
@@ -214,7 +217,7 @@ function whiteurl()
     if WhiteCheck then
         if wturlrules ~=nil then
             for _,rule in pairs(wturlrules) do
-                if ngxmatch(ngx.var.uri,rule,"isjo") then
+                if rule ~= "" and ngxmatch(ngx.var.uri,rule,"isjo") then
                     return true 
                  end
             end
@@ -231,7 +234,7 @@ function whiteuri()
         end
         if wturirules ~=nil then
             for _,rule in pairs(wturirules) do
-                if ngxmatch(args,rule,"isjo") then
+                if rule ~= "" and ngxmatch(args,rule,"isjo") then
                     return true
                  end
             end
@@ -279,9 +282,9 @@ function Set (list)
 end
 
 function args()
-    local args = ngx.req.get_uri_args()
-    local uri=ngx.var.request_uri()
 
+    local args = ngx.req.get_uri_args()
+    local uri = ngx.var.request_uri
     --todo : 漏洞  ngx.req.get_uri_args()只能获取100个参数，超过100造成绕过漏洞
     for _,rule in pairs(argsrules) do
         
@@ -304,7 +307,6 @@ function args()
                 return true
             end
         end
-        
          --临时修复
         if rule ~="" and ngxmatch(uri,rule,"isjo") then
             log('Args_Check',uri,"-",rule)
@@ -451,3 +453,4 @@ function split_str(str, sep)
     end
     return t;
 end
+
