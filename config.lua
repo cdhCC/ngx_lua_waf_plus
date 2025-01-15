@@ -15,6 +15,9 @@ CCrate="300/60"
 ---举例：前置CDN配置请求头X-FORWARDED-FOR，则此处配置HTTP_X_FORWARDED_FOR
 HTTP_X_FORWARDED_FOR_HEADER="HTTP_X_FORWARDED_FOR_dfx1"
 ---是否封锁攻击源
+---申明：本waf天然存在许多可被绕过的漏洞，建议启用攻击封锁，在被探测出绕过方式前封锁探测IP
+---封锁攻击IP，实乃无奈之举
+---预算充足建议上商用waf
 BanIp="on"
 ---每次攻击扣减分数
 ---统计攻击分数而不是统计攻击次数原因：方便后期扩展，不同攻击扣减不同分数，攻击扣减分数差异化设计
@@ -27,7 +30,8 @@ BanTime="1200"
 
 BodyCheck="on"
 --是否检测POST 文件,文件上传检测可能导致网页、代码等文件上传失败，出现误封等情况
-PostFileCheck="on"
+--默认关闭
+PostFileCheck="off"
 --是否检测POST args
 BodyArgsCheck="on"
 
@@ -43,3 +47,4 @@ responseErrorCount=10
 responseErrorCheckTime=60
 ---错误检测异常保护时间，单位：秒，发生封锁后，解锁时间
 responseErrorBanTime=1200
+
