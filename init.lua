@@ -87,7 +87,7 @@ urlrules=read_rule('url')
 argsrules=read_rule('args')
 uarules=read_rule('user-agent')
 wturlrules=read_rule('whiteurl')
-wturirules=read_rule('whiteuri')
+whiteArgsRules=read_rule('whiteargs')
 wtportrules=read_rule('whiteport')
 postrules=read_rule('post')
 ckrules=read_rule('cookie')
@@ -123,11 +123,11 @@ end
 function is_ban()
     if BanIp then
         if get_ban_times() >= BanTotalGrade then        --超过规定的BanTotalGrade积分，封锁IP，从上一次攻击被扫描到开始计算，总计封锁 BanTime 秒
-	    log('多次攻击BAN-IP:  ',ngx.var.request_uri,"-","BLOCK_IP")
+	       log('多次攻击BAN-IP:  ',ngx.var.request_uri,"-","BLOCK_IP")
             ngx.status = ngx.HTTP_FORBIDDEN
-	    ngx.header.content_type = "text/html;charset=UTF-8"
-	    ngx.say("<div style='display: none;'>" .. ngx.localtime() .. "</div>")
-	    ngx.say("<div style='display: none;'> HELLO, " .. getClientIp() .. " , YOU HAVE BEEN BLOCKED BY US, TRY ANOTHER DAY ! SORRY ! BYE</div>")
+	        ngx.header.content_type = "text/html;charset=UTF-8"
+	        ngx.say("<div style='display: none;'>" .. ngx.localtime() .. "</div>")
+	        ngx.say("<div style='display: none;'> HELLO, " .. getClientIp() .. " , YOU HAVE BEEN BLOCKED BY US, TRY ANOTHER DAY ! SORRY ! BYE</div>")
             ngx.say(banhtml)
             ngx.exit(ngx.HTTP_FORBIDDEN)
             return true
@@ -142,7 +142,7 @@ function checkResponseStatus(state)
     for _,errtype in pairs(responseErrorType) do
             if state == errtype then
                 add_responseError(1)
-	           log('异常状态检测  ' .. errtype ,ngx.var.request_uri,"-","RESPONSE_ERROR")
+	            log('异常状态检测  ' .. errtype ,ngx.var.request_uri,"-","RESPONSE_ERROR")
             end
     end
 end
@@ -174,15 +174,8 @@ end
 ---检查源IP是否发生多次响应异常状态，如果次数太多，则封锁 responseErrorBanTime 秒
 function responseErrorProtect()
     if responseErrorProtect then
-	local responseError = get_responseError()
+	    local responseError = get_responseError()
         if responseError >= responseErrorCount then
-	    ---达到检测阈值，进行封锁
-	    if responseError == responseErrorCount then
-	        local token = getClientIp() .. "_errResponse"
-		local limit = ngx.shared.resErrLimit
-		limit:set(token,responseErrorCount+1,tonumber(responseErrorBanTime),ngx.time())
-	    end
-
             log('异常状态封禁  ',ngx.var.request_uri,"-","TOMANY_RESPONSE_ERROR")
             ngx.status = ngx.HTTP_FORBIDDEN
             ngx.header.content_type = "text/html;charset=UTF-8"
@@ -217,7 +210,7 @@ function whiteurl()
     if WhiteCheck then
         if wturlrules ~=nil then
             for _,rule in pairs(wturlrules) do
-                if rule ~= "" and ngxmatch(ngx.var.uri,rule,"isjo") then
+                if rule ~= "" and ngxmatch(ngx.var.request_uri,rule,"isjo") then
                     return true 
                  end
             end
@@ -226,15 +219,11 @@ function whiteurl()
     return false
 end
 
-function whiteuri()
+function whiteArgs()
     if WhiteCheck then
-        local args=ngx.var.arg_service
-        if args == nil then
-           return false
-        end
-        if wturirules ~=nil then
-            for _,rule in pairs(wturirules) do
-                if rule ~= "" and ngxmatch(args,rule,"isjo") then
+        if whiteArgsRules ~=nil then
+            for _,rule in pairs(whiteArgsRules) do
+                if rule ~= "" and ngxmatch(ngx.var.request_uri,rule,"isjo") then
                     return true
                  end
             end
@@ -245,13 +234,13 @@ end
 
 function whiteport()
     if WhiteCheck then
-        local args=ngx.var.server_port
-        if args == nil then
+        local port=ngx.var.server_port
+        if port == nil then
            return false
         end
         if wtportrules ~=nil then
             for _,rule in pairs(wtportrules) do
-                if ngxmatch(args,rule,"isjo") then
+                if ngxmatch(port,rule,"isjo") then
                     return true
                  end
             end
@@ -282,36 +271,12 @@ function Set (list)
 end
 
 function args()
-
-    local args = ngx.req.get_uri_args()
     local uri = ngx.var.request_uri
-    --todo : 漏洞  ngx.req.get_uri_args()只能获取100个参数，超过100造成绕过漏洞
     for _,rule in pairs(argsrules) do
-        
-        for key, val in pairs(args) do
-            if type(val)=='table' then
-                 local t={}
-                 for k,v in pairs(val) do
-                    if v == true then
-                        v=""
-                    end
-                    table.insert(t,v)
-                end
-                data=table.concat(t, " ")
-            else
-                data=val
-            end
-            if data and type(data) ~= "boolean" and rule ~="" and ngxmatch(unescape(data),rule,"isjo") then
-                log('Args_Check',uri,"-",rule)
-                BanAndRuturnHtml()
-                return true
-            end
-        end
-         --临时修复
         if rule ~="" and ngxmatch(uri,rule,"isjo") then
-            log('Args_Check',uri,"-",rule)
-                BanAndRuturnHtml()
-                return true
+            log('Args_Check ',uri,"-",rule)
+            BanAndRuturnHtml()
+            return true
         end
     end
     return false
@@ -411,9 +376,10 @@ function get_boundary()
 end
 
 function whiteip()
+    local clientIP=getClientIp()
     if next(ipWhitelist) ~= nil then
         for _,ip in pairs(ipWhitelist) do
-            if getClientIp()==ip then
+            if clientIP==ip then
                 return true
             end
         end
@@ -422,15 +388,16 @@ function whiteip()
 end
 
 function blockip()
-     if next(ipBlocklist) ~= nil then
+    local clientIP=getClientIp()
+    if next(ipBlocklist) ~= nil then
          for _,ip in pairs(ipBlocklist) do
-             if getClientIp()==ip then
+             if clientIP == ip then
                  ngx.exit(444)
                  return true
              end
          end
-     end
-         return false
+    end
+    return false
 end
 
 
@@ -453,4 +420,3 @@ function split_str(str, sep)
     end
     return t;
 end
-
