@@ -4,7 +4,6 @@
 /\*|--
 \b(or|xor|and)\b.*(=|<|>|'|")
 select.+(from|limit)
-
 (?:(union(.*?)select))
 having
 load_file
