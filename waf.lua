@@ -12,18 +12,18 @@ if ngx.var.http_Acunetix_Aspect then ngx.exit(444) end
 if ngx.var.http_X_Scan_Memo then ngx.exit(444) end
 if whiteport() then return end
 if whiteurl() then return end
-if whiteuri() then return end
+if whiteArgs() then return end
 if ua() then return end
 if url() then return end
 if args() then return end
 if cookie() then return end
 
 if BodyCheck then
-        --设置读取 body体，必须设置，否则无法读取数据
+        --设置读取post body体，必须设置，否则无法读取POST数据
       	ngx.req.read_body()
-        --内容被保存在内存中，用get_body_data直接读
+        --POST内容被保存在内存中，用get_body_data直接读
         local data=ngx.req.get_body_data()
-        --内容太大，被保存到临时文件中，需要以文件方式处理
+        --POST内容太大，被保存到临时文件中，需要以文件方式处理
         --body体大小大于client_body_buffer_size，则会被保存在文件中
         if not data then
             local filePath = ngx.req.get_body_file()
@@ -49,10 +49,18 @@ if BodyCheck then
         if boundary then
             local parts=split_str(data,boundary)
             for i,v in ipairs(parts) do
-                local m = ngxmatch(v,[[Content-Disposition: form-data;(.+)filename="(.+)\.(.*)"]],'ijo')
+                
+                local m = ngxmatch(v,[[filename="(.+)\.(.*)"]],'ijo')
+                --防上传绕过 
+                --畸形上传文件头也会被绕过
+                --todo  漏洞:无法解决 a.txt.fff.php 这类绕过
+                if not m then
+                     m = ngxmatch(v,[[filename=(.+)\.(.*)]],'ijo')
+                end
+               
                     --如果包含filename，则进行文件后缀名检查
                 if m then
-                    fileExtCheck(m[3])
+                    fileExtCheck(m[2])
                 end
                 --如果开启了文件上传检测，则进入内容检查
                 if PostFileCheck then
@@ -61,7 +69,9 @@ if BodyCheck then
             end
         --不存在分界符，直接进入body检测
         else
-            body(data)
+            if BodyArgsCheck then
+               body(data)
+            end
         end
 --body check结束
 end
