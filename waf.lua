@@ -1,9 +1,6 @@
 local content_length=tonumber(ngx.req.get_headers()['content-length'])
-
 local ngxmatch=ngx.re.match
-
 if whiteip() then return end
-
 if blockip() then return end
 if is_ban() then return end
 if responseErrorProtect() then return end
