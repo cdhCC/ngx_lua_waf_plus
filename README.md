@@ -10,7 +10,7 @@
 
 
 加载方式
-在nginx.conf的server块中加入如下配置
+将waf解压到/www/waf目录，在nginx.conf的server块中加入如下配置
 
 
 lua_package_path "/www/waf/?.lua;";
@@ -27,3 +27,4 @@ access_by_lua_file /www/waf/waf.lua;
 
 log_by_lua_file /www/waf/response.lua;
 
+使用其他目录请修改相应路径配置
