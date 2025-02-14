@@ -27,4 +27,4 @@ access_by_lua_file /www/waf/waf.lua;
 
 log_by_lua_file /www/waf/response.lua;
 
-使用其他目录请修改相应路径配置
+使用其他目录请修改相应路径配置，且修改config.lua文件下的路径配置
